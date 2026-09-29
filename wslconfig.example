@@ -1,0 +1,4 @@
+[wsl2]
+memory=12GB
+swap=24GB
+processors=14

@@ -1,0 +1,128 @@
+diff --git a/evaluation/waymo/pred_bin.py b/evaluation/waymo/pred_bin.py
+index 208083d..1a0a578 100644
+--- a/evaluation/waymo/pred_bin.py
++++ b/evaluation/waymo/pred_bin.py
+@@ -192,7 +192,7 @@ if __name__ == '__main__':
+     args.raw_data_folder=os.path.join(args.raw_data_folder, split)
+ 
+     if args.config_path != '':
+-        config = yaml.load(open(args.config_path, 'r'))
++        config = yaml.load(open(args.config_path, 'r'), Loader=yaml.FullLoader)
+         config = config.get('merge', {})
+     else:
+         config = {}
+diff --git a/evaluation/waymo/rm_fp_by_gt.py b/evaluation/waymo/rm_fp_by_gt.py
+index 70ebd7a..5b0e4d9 100644
+--- a/evaluation/waymo/rm_fp_by_gt.py
++++ b/evaluation/waymo/rm_fp_by_gt.py
+@@ -65,7 +65,7 @@ def process_single_frame(config, data_root, out_list, input_list, ts2idx, token,
+     print(f'Process {token} starts...')
+ 
+     try:
+-        torch.cuda.set_device(token % 8)
++        torch.cuda.set_device(token % torch.cuda.device_count())
+ 
+         from mmdet3d.core import LiDARInstance3DBoxes
+ 
+@@ -121,7 +121,7 @@ if __name__ == '__main__':
+     old_bin_name = osp.basename(bin_path).split('.')[0]
+ 
+     suffix = osp.basename(args.config).split('.')[0]
+-    config = yaml.load(open(args.config, 'r'))
++    config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+ 
+     save_path = osp.join(osp.dirname(bin_path), old_bin_name + f'_{suffix}.bin')
+     print(f'Results will be saved to {save_path}')
+diff --git a/main_nuscenes.py b/main_nuscenes.py
+index 230fe17..479c622 100644
+--- a/main_nuscenes.py
++++ b/main_nuscenes.py
+@@ -118,7 +118,7 @@ def main(name, obj_types, config_path, data_folder, det_data_folder, result_fold
+             file_names = [fname for fname in file_names if not os.path.exists(os.path.join(summary_folder, fname))]
+         
+         # load model configs
+-        configs = yaml.load(open(config_path, 'r'))
++        configs = yaml.load(open(config_path, 'r'), Loader=yaml.FullLoader)
+     
+         for file_index, file_name in enumerate(file_names[:]):
+             if file_index % process != token:
+diff --git a/main_waymo.py b/main_waymo.py
+index 2228d6a..8e3d6c9 100644
+--- a/main_waymo.py
++++ b/main_waymo.py
+@@ -113,11 +113,11 @@ def main(name, obj_type, config_path, data_folder, det_data_folder, result_folde
+         file_names = [fname for fname in file_names if not os.path.exists(os.path.join(summary_folder, fname))]
+     
+     # load model configs
+-    configs = yaml.load(open(config_path, 'r'))
++    configs = yaml.load(open(config_path, 'r'), Loader=yaml.FullLoader)
+     gpu = configs['running'].get('gpu', False)
+     if gpu:
+         import torch
+-        torch.cuda.set_device(token % 8)
++        torch.cuda.set_device(token % torch.cuda.device_count())
+     
+     if obj_type == 'vehicle':
+         type_token = 1
+diff --git a/mot_3d/preprocessing/bbox_coarse_hash.py b/mot_3d/preprocessing/bbox_coarse_hash.py
+index 417b70b..080b0cd 100644
+--- a/mot_3d/preprocessing/bbox_coarse_hash.py
++++ b/mot_3d/preprocessing/bbox_coarse_hash.py
+@@ -23,8 +23,8 @@ class BBoxCoarseFilter:
+         
+     def compute_bbox_key(self, bbox):
+         corners = np.asarray(BBox.box2corners2d(bbox))
+-        min_keys = np.floor(np.min(corners, axis=0) / self.gsize).astype(np.int)
+-        max_keys = np.floor(np.max(corners, axis=0) / self.gsize).astype(np.int)
++        min_keys = np.floor(np.min(corners, axis=0) / self.gsize).astype(np.int64)
++        max_keys = np.floor(np.max(corners, axis=0) / self.gsize).astype(np.int64)
+         
+         # enumerate all the corners
+         grid_keys = [
+diff --git a/preparedata/waymo/ego_info.py b/preparedata/waymo/ego_info.py
+index eb67a5b..a547364 100644
+--- a/preparedata/waymo/ego_info.py
++++ b/preparedata/waymo/ego_info.py
+@@ -76,7 +76,7 @@ def main(token, process_num, data_folder, output_folder):
+ 
+         for data in dataset:
+             frame = open_dataset.Frame()
+-            frame.ParseFromString(bytearray(data.numpy()))
++            frame.ParseFromString(bytes(data.numpy()))
+      
+             ego_info = np.reshape(np.array(frame.pose.transform), [4, 4])
+             ego_infos[str(frame_num)] = ego_info
+@@ -107,4 +107,4 @@ if __name__ == '__main__':
+         pool.close()
+         pool.join()
+     else:
+-        main(args.data_folder, args.output_folder)
++        main(0, 1, args.data_folder, args.output_folder)
+diff --git a/preparedata/waymo/time_stamp.py b/preparedata/waymo/time_stamp.py
+index a7986d5..1077845 100644
+--- a/preparedata/waymo/time_stamp.py
++++ b/preparedata/waymo/time_stamp.py
+@@ -38,7 +38,7 @@ def main(data_folder, out_folder):
+         time_stamps = list()
+         for data in dataset:
+             frame = open_dataset.Frame()
+-            frame.ParseFromString(bytearray(data.numpy()))
++            frame.ParseFromString(bytes(data.numpy()))
+             time_stamps.append(frame.timestamp_micros)
+         
+         file_name = tf_record_name.split('.')[0]
+diff --git a/preprocessing/py_nms/bbox_coarse_hash.py b/preprocessing/py_nms/bbox_coarse_hash.py
+index cdaa25d..99f6118 100644
+--- a/preprocessing/py_nms/bbox_coarse_hash.py
++++ b/preprocessing/py_nms/bbox_coarse_hash.py
+@@ -23,8 +23,8 @@ class BBoxCoarseFilter:
+         
+     def compute_bbox_key(self, bbox):
+         corners = np.asarray(BBox.box2corners2d(bbox))
+-        min_keys = np.floor(np.min(corners, axis=0) / self.gsize).astype(np.int)
+-        max_keys = np.floor(np.max(corners, axis=0) / self.gsize).astype(np.int)
++        min_keys = np.floor(np.min(corners, axis=0) / self.gsize).astype(np.int64)
++        max_keys = np.floor(np.max(corners, axis=0) / self.gsize).astype(np.int64)
+         
+         # enumerate all the corners
+         grid_keys = [

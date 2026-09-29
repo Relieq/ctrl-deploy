@@ -1,0 +1,648 @@
+diff --git a/mmdet3d/__init__.py b/mmdet3d/__init__.py
+index 839cded..dced021 100644
+--- a/mmdet3d/__init__.py
++++ b/mmdet3d/__init__.py
+@@ -18,7 +18,7 @@ def digit_version(version_str):
+ 
+ 
+ mmcv_minimum_version = '1.3.8'
+-mmcv_maximum_version = '1.4.0'
++mmcv_maximum_version = '1.7.2'
+ mmcv_version = digit_version(mmcv.__version__)
+ 
+ 
+diff --git a/mmdet3d/apis/inference.py b/mmdet3d/apis/inference.py
+index 78dfa1e..74248ff 100644
+--- a/mmdet3d/apis/inference.py
++++ b/mmdet3d/apis/inference.py
+@@ -350,7 +350,7 @@ def show_seg_result_meshlab(data,
+         # generate random color map
+         max_idx = pred_seg.max()
+         palette = np.random.randint(0, 256, size=(max_idx + 1, 3))
+-    palette = np.array(palette).astype(np.int)
++    palette = np.array(palette).astype(np.int64)
+ 
+     show_seg_result(
+         points,
+diff --git a/mmdet3d/core/bbox/structures/lidar_tracklet.py b/mmdet3d/core/bbox/structures/lidar_tracklet.py
+index 7a28dd0..28c570d 100644
+--- a/mmdet3d/core/bbox/structures/lidar_tracklet.py
++++ b/mmdet3d/core/bbox/structures/lidar_tracklet.py
+@@ -583,7 +583,7 @@ class LiDARTracklet(object):
+             ious = LiDARInstance3DBoxes.aligned_iou_3d(repeat_base_boxes, flat_all_boxes)
+             ious = ious.reshape(num_augs, len_trk).cpu().numpy()
+             ious[0, :] = 1
+-            iou_mask = (ious > cfg['iou_merge_thresh']).astype(np.float)
++            iou_mask = (ious > cfg['iou_merge_thresh']).astype(np.float64)
+             all_scores *= iou_mask
+ 
+             # assert num_augs % 2 == 1
+diff --git a/mmdet3d/core/evaluation/seg_eval.py b/mmdet3d/core/evaluation/seg_eval.py
+index bb81807..d139cc5 100644
+--- a/mmdet3d/core/evaluation/seg_eval.py
++++ b/mmdet3d/core/evaluation/seg_eval.py
+@@ -87,8 +87,8 @@ def seg_eval(gt_labels, seg_preds, label2cat, ignore_index, logger=None):
+ 
+     hist_list = []
+     for i in range(len(gt_labels)):
+-        gt_seg = gt_labels[i].clone().numpy().astype(np.int)
+-        pred_seg = seg_preds[i].clone().numpy().astype(np.int)
++        gt_seg = gt_labels[i].clone().numpy().astype(np.int64)
++        pred_seg = seg_preds[i].clone().numpy().astype(np.int64)
+ 
+         # filter out ignored points
+         pred_seg[gt_seg == ignore_index] = -1
+diff --git a/mmdet3d/core/evaluation/waymo_utils/prediction_kitti_to_waymo.py b/mmdet3d/core/evaluation/waymo_utils/prediction_kitti_to_waymo.py
+index e98b541..42901ea 100644
+--- a/mmdet3d/core/evaluation/waymo_utils/prediction_kitti_to_waymo.py
++++ b/mmdet3d/core/evaluation/waymo_utils/prediction_kitti_to_waymo.py
+@@ -179,7 +179,7 @@ class KITTI2Waymo(object):
+ 
+         for frame_num, frame_data in enumerate(file_data):
+             frame = open_dataset.Frame()
+-            frame.ParseFromString(bytearray(frame_data.numpy()))
++            frame.ParseFromString(bytes(frame_data.numpy()))
+ 
+             if self.prefix == '0':
+                 filename = str(int(f'{file_idx}{frame_num:03d}'))
+diff --git a/mmdet3d/core/visualizer/image_vis.py b/mmdet3d/core/visualizer/image_vis.py
+index de49a6d..e53db4d 100644
+--- a/mmdet3d/core/visualizer/image_vis.py
++++ b/mmdet3d/core/visualizer/image_vis.py
+@@ -74,7 +74,7 @@ def plot_rect3d_on_img(img,
+     line_indices = ((0, 1), (0, 3), (0, 4), (1, 2), (1, 5), (3, 2), (3, 7),
+                     (4, 5), (4, 7), (2, 6), (5, 6), (6, 7))
+     for i in range(num_rects):
+-        corners = rect_corners[i].astype(np.int)
++        corners = rect_corners[i].astype(np.int64)
+         for start, end in line_indices:
+             cv2.line(img, (corners[start, 0], corners[start, 1]),
+                      (corners[end, 0], corners[end, 1]), color, thickness,
+diff --git a/mmdet3d/core/visualizer/open3d_vis.py b/mmdet3d/core/visualizer/open3d_vis.py
+index 3a2933c..2eb1f69 100644
+--- a/mmdet3d/core/visualizer/open3d_vis.py
++++ b/mmdet3d/core/visualizer/open3d_vis.py
+@@ -242,7 +242,7 @@ def _draw_bboxes_ind(bbox3d,
+ 
+         # change the color of points which are in box
+         if pcd is not None and mode == 'xyz':
+-            points_colors[indices[:, i].astype(np.bool)] = in_box_color
++            points_colors[indices[:, i].astype(np.bool_)] = in_box_color
+ 
+     # update points colors
+     if pcd is not None:
+diff --git a/mmdet3d/datasets/pipelines/data_augment_utils.py b/mmdet3d/datasets/pipelines/data_augment_utils.py
+index e0bc716..6411370 100644
+--- a/mmdet3d/datasets/pipelines/data_augment_utils.py
++++ b/mmdet3d/datasets/pipelines/data_augment_utils.py
+@@ -1,7 +1,7 @@
+ import numba
+ import numpy as np
+ import warnings
+-from numba.errors import NumbaPerformanceWarning
++from numba.core.errors import NumbaPerformanceWarning
+ 
+ from mmdet3d.core.bbox import box_np_ops
+ 
+diff --git a/mmdet3d/datasets/pipelines/loading.py b/mmdet3d/datasets/pipelines/loading.py
+index ff221b3..321c9c2 100644
+--- a/mmdet3d/datasets/pipelines/loading.py
++++ b/mmdet3d/datasets/pipelines/loading.py
+@@ -264,7 +264,7 @@ class PointSegClassMapping(object):
+         # build cat_id to class index mapping
+         neg_cls = len(valid_cat_ids)
+         self.cat_id2class = np.ones(
+-            self.max_cat_id + 1, dtype=np.int) * neg_cls
++            self.max_cat_id + 1, dtype=np.int64) * neg_cls
+         for cls_idx, cat_id in enumerate(valid_cat_ids):
+             self.cat_id2class[cat_id] = cls_idx
+ 
+@@ -615,11 +615,11 @@ class LoadAnnotations3D(LoadAnnotations):
+             self.file_client = mmcv.FileClient(**self.file_client_args)
+         try:
+             mask_bytes = self.file_client.get(pts_instance_mask_path)
+-            pts_instance_mask = np.frombuffer(mask_bytes, dtype=np.int)
++            pts_instance_mask = np.frombuffer(mask_bytes, dtype=np.int64)
+         except ConnectionError:
+             mmcv.check_file_exist(pts_instance_mask_path)
+             pts_instance_mask = np.fromfile(
+-                pts_instance_mask_path, dtype=np.long)
++                pts_instance_mask_path, dtype=np.int64)
+ 
+         results['pts_instance_mask'] = pts_instance_mask
+         results['pts_mask_fields'].append('pts_instance_mask')
+@@ -646,7 +646,7 @@ class LoadAnnotations3D(LoadAnnotations):
+         except ConnectionError:
+             mmcv.check_file_exist(pts_semantic_mask_path)
+             pts_semantic_mask = np.fromfile(
+-                pts_semantic_mask_path, dtype=np.long)
++                pts_semantic_mask_path, dtype=np.int64)
+ 
+         results['pts_semantic_mask'] = pts_semantic_mask
+         results['pts_seg_fields'].append('pts_semantic_mask')
+diff --git a/mmdet3d/datasets/scannet_dataset.py b/mmdet3d/datasets/scannet_dataset.py
+index 7ffa397..985eb79 100644
+--- a/mmdet3d/datasets/scannet_dataset.py
++++ b/mmdet3d/datasets/scannet_dataset.py
+@@ -89,10 +89,10 @@ class ScanNetDataset(Custom3DDataset):
+         if info['annos']['gt_num'] != 0:
+             gt_bboxes_3d = info['annos']['gt_boxes_upright_depth'].astype(
+                 np.float32)  # k, 6
+-            gt_labels_3d = info['annos']['class'].astype(np.long)
++            gt_labels_3d = info['annos']['class'].astype(np.int64)
+         else:
+             gt_bboxes_3d = np.zeros((0, 6), dtype=np.float32)
+-            gt_labels_3d = np.zeros((0, ), dtype=np.long)
++            gt_labels_3d = np.zeros((0, ), dtype=np.int64)
+ 
+         # to target box structure
+         gt_bboxes_3d = DepthInstance3DBoxes(
+@@ -390,7 +390,7 @@ class ScanNetSegDataset(Custom3DSegDataset):
+         mmcv.mkdir_or_exist(txtfile_prefix)
+ 
+         # need to map network output to original label idx
+-        pred2label = np.zeros(len(self.VALID_CLASS_IDS)).astype(np.int)
++        pred2label = np.zeros(len(self.VALID_CLASS_IDS)).astype(np.int64)
+         for original_label, output_idx in self.label_map.items():
+             if output_idx != self.ignore_index:
+                 pred2label[output_idx] = original_label
+@@ -399,7 +399,7 @@ class ScanNetSegDataset(Custom3DSegDataset):
+         for i, result in enumerate(results):
+             info = self.data_infos[i]
+             sample_idx = info['point_cloud']['lidar_idx']
+-            pred_sem_mask = result['semantic_mask'].numpy().astype(np.int)
++            pred_sem_mask = result['semantic_mask'].numpy().astype(np.int64)
+             pred_label = pred2label[pred_sem_mask]
+             curr_file = f'{txtfile_prefix}/{sample_idx}.txt'
+             np.savetxt(curr_file, pred_label, fmt='%d')
+diff --git a/mmdet3d/datasets/sunrgbd_dataset.py b/mmdet3d/datasets/sunrgbd_dataset.py
+index ce1f0c0..7f1a8b0 100644
+--- a/mmdet3d/datasets/sunrgbd_dataset.py
++++ b/mmdet3d/datasets/sunrgbd_dataset.py
+@@ -135,10 +135,10 @@ class SUNRGBDDataset(Custom3DDataset):
+         if info['annos']['gt_num'] != 0:
+             gt_bboxes_3d = info['annos']['gt_boxes_upright_depth'].astype(
+                 np.float32)  # k, 6
+-            gt_labels_3d = info['annos']['class'].astype(np.long)
++            gt_labels_3d = info['annos']['class'].astype(np.int64)
+         else:
+             gt_bboxes_3d = np.zeros((0, 7), dtype=np.float32)
+-            gt_labels_3d = np.zeros((0, ), dtype=np.long)
++            gt_labels_3d = np.zeros((0, ), dtype=np.int64)
+ 
+         # to target box structure
+         gt_bboxes_3d = DepthInstance3DBoxes(
+diff --git a/mmdet3d/ops/ball_query/src/ball_query.cpp b/mmdet3d/ops/ball_query/src/ball_query.cpp
+index 6e9d5f7..e8256a0 100644
+--- a/mmdet3d/ops/ball_query/src/ball_query.cpp
++++ b/mmdet3d/ops/ball_query/src/ball_query.cpp
+@@ -1,7 +1,7 @@
+ // Modified from
+ // https://github.com/sshaoshuai/Pointnet2.PyTorch/tree/master/pointnet2/src/ball_query.cpp
+ 
+-#include <THC/THC.h>
++#include <ATen/cuda/CUDAContext.h>
+ #include <cuda.h>
+ #include <cuda_runtime_api.h>
+ #include <torch/extension.h>
+@@ -9,10 +9,9 @@
+ 
+ #include <vector>
+ 
+-extern THCState *state;
+ 
+ #define CHECK_CUDA(x) \
+-  TORCH_CHECK(x.type().is_cuda(), #x, " must be a CUDAtensor ")
++  TORCH_CHECK(x.is_cuda(), #x, " must be a CUDAtensor ")
+ #define CHECK_CONTIGUOUS(x) \
+   TORCH_CHECK(x.is_contiguous(), #x, " must be contiguous ")
+ #define CHECK_INPUT(x) \
+diff --git a/mmdet3d/ops/furthest_point_sample/src/furthest_point_sample.cpp b/mmdet3d/ops/furthest_point_sample/src/furthest_point_sample.cpp
+index be05890..9f75660 100644
+--- a/mmdet3d/ops/furthest_point_sample/src/furthest_point_sample.cpp
++++ b/mmdet3d/ops/furthest_point_sample/src/furthest_point_sample.cpp
+@@ -2,13 +2,12 @@
+ // https://github.com/sshaoshuai/Pointnet2.PyTorch/tree/master/pointnet2/src/sampling.cpp
+ 
+ #include <ATen/cuda/CUDAContext.h>
+-#include <THC/THC.h>
++#include <ATen/cuda/CUDAContext.h>
+ #include <torch/extension.h>
+ #include <torch/serialize/tensor.h>
+ 
+ #include <vector>
+ 
+-extern THCState *state;
+ 
+ int furthest_point_sampling_wrapper(int b, int n, int m,
+                                     at::Tensor points_tensor,
+@@ -47,9 +46,9 @@ int furthest_point_sampling_with_dist_wrapper(int b, int n, int m,
+                                               at::Tensor temp_tensor,
+                                               at::Tensor idx_tensor) {
+ 
+-  const float *points = points_tensor.data<float>();
+-  float *temp = temp_tensor.data<float>();
+-  int *idx = idx_tensor.data<int>();
++  const float *points = points_tensor.data_ptr<float>();
++  float *temp = temp_tensor.data_ptr<float>();
++  int *idx = idx_tensor.data_ptr<int>();
+ 
+   cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();
+   furthest_point_sampling_with_dist_kernel_launcher(b, n, m, points, temp, idx, stream);
+diff --git a/mmdet3d/ops/gather_points/src/gather_points.cpp b/mmdet3d/ops/gather_points/src/gather_points.cpp
+index 01a3e40..c15fa6c 100644
+--- a/mmdet3d/ops/gather_points/src/gather_points.cpp
++++ b/mmdet3d/ops/gather_points/src/gather_points.cpp
+@@ -1,11 +1,10 @@
+ #include <ATen/cuda/CUDAContext.h>
+-#include <THC/THC.h>
++#include <ATen/cuda/CUDAContext.h>
+ #include <torch/extension.h>
+ #include <torch/serialize/tensor.h>
+ 
+ #include <vector>
+ 
+-extern THCState *state;
+ 
+ int gather_points_wrapper(int b, int c, int n, int npoints,
+                           at::Tensor points_tensor, at::Tensor idx_tensor,
+diff --git a/mmdet3d/ops/group_points/src/group_points.cpp b/mmdet3d/ops/group_points/src/group_points.cpp
+index 3cd6fc8..b3f8bda 100644
+--- a/mmdet3d/ops/group_points/src/group_points.cpp
++++ b/mmdet3d/ops/group_points/src/group_points.cpp
+@@ -1,7 +1,7 @@
+ // Modified from
+ // https://github.com/sshaoshuai/Pointnet2.PyTorch/tree/master/pointnet2/src/group_points.cpp
+ 
+-#include <THC/THC.h>
++#include <ATen/cuda/CUDAContext.h>
+ #include <cuda.h>
+ #include <cuda_runtime_api.h>
+ #include <torch/extension.h>
+@@ -9,7 +9,6 @@
+ 
+ #include <vector>
+ 
+-extern THCState *state;
+ 
+ int group_points_wrapper(int b, int c, int n, int npoints, int nsample,
+                          at::Tensor points_tensor, at::Tensor idx_tensor,
+diff --git a/mmdet3d/ops/interpolate/src/interpolate.cpp b/mmdet3d/ops/interpolate/src/interpolate.cpp
+index 6382579..4817f68 100644
+--- a/mmdet3d/ops/interpolate/src/interpolate.cpp
++++ b/mmdet3d/ops/interpolate/src/interpolate.cpp
+@@ -1,7 +1,7 @@
+ // Modified from
+ // https://github.com/sshaoshuai/Pointnet2.PyTorch/tree/master/pointnet2/src/interpolate.cpp
+ 
+-#include <THC/THC.h>
++#include <ATen/cuda/CUDAContext.h>
+ #include <cuda.h>
+ #include <cuda_runtime_api.h>
+ #include <math.h>
+@@ -12,7 +12,6 @@
+ 
+ #include <vector>
+ 
+-extern THCState *state;
+ 
+ void three_nn_wrapper(int b, int n, int m, at::Tensor unknown_tensor,
+                       at::Tensor known_tensor, at::Tensor dist2_tensor,
+diff --git a/mmdet3d/ops/knn/src/knn.cpp b/mmdet3d/ops/knn/src/knn.cpp
+index 84ddf4b..4cb7a22 100644
+--- a/mmdet3d/ops/knn/src/knn.cpp
++++ b/mmdet3d/ops/knn/src/knn.cpp
+@@ -3,10 +3,9 @@
+ #include <torch/serialize/tensor.h>
+ #include <torch/extension.h>
+ #include <vector>
+-#include <THC/THC.h>
++#include <ATen/cuda/CUDAContext.h>
+ #include <ATen/cuda/CUDAContext.h>
+ 
+-extern THCState *state;
+ 
+ #define CHECK_CUDA(x) TORCH_CHECK(x.is_cuda(), #x, " must be a CUDAtensor ")
+ #define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x, " must be contiguous ")
+diff --git a/mmdet3d/utils/vis_utils.py b/mmdet3d/utils/vis_utils.py
+index 684b80c..dea027c 100644
+--- a/mmdet3d/utils/vis_utils.py
++++ b/mmdet3d/utils/vis_utils.py
+@@ -28,7 +28,7 @@ def vis_voxel_label(name, voxel_coors, label, voxel_size=[0.32, 0.32, 5], pc_ran
+     resolution: (num_pxl_x, num_pxl_y)
+     '''
+     if isinstance(voxel_coors, torch.Tensor):
+-        voxel_coors = voxel_coors.detach().cpu().numpy().astype(np.float)
++        voxel_coors = voxel_coors.detach().cpu().numpy().astype(np.float64)
+     if isinstance(label, torch.Tensor):
+         label = label.detach().cpu().numpy()
+     assert voxel_coors.shape[0] == label.shape[0]
+@@ -85,7 +85,7 @@ def vis_point_label(name, points, label, pc_range=[-51.2, -51.2, -3, 51.2, 51.2,
+     resolution: (num_pxl_x, num_pxl_y)
+     '''
+     if isinstance(points, torch.Tensor):
+-        points = points.detach().cpu().numpy().astype(np.float)
++        points = points.detach().cpu().numpy().astype(np.float64)
+     if isinstance(label, torch.Tensor):
+         label = label.detach().cpu().numpy()
+     assert points.shape[0] == label.shape[0]
+@@ -260,7 +260,7 @@ def vis_heatmap(name, heatmap, resolution=(2048, 2028), dir=None, box_color='red
+ 
+     assert isinstance(heatmap, torch.Tensor)
+     heatmap = torch.nn.functional.interpolate(heatmap[None, None, :, :], resolution, mode=interpolation)
+-    heatmap = heatmap.detach().cpu().numpy().astype(np.float)[0, 0, ...]
++    heatmap = heatmap.detach().cpu().numpy().astype(np.float64)[0, 0, ...]
+ 
+ 
+     fig, ax = plt.subplots(figsize=(40,40))
+diff --git a/setup.py b/setup.py
+index e458ec2..c3c81c9 100644
+--- a/setup.py
++++ b/setup.py
+@@ -169,26 +169,6 @@ if __name__ == '__main__':
+             'optional': parse_requirements('requirements/optional.txt'),
+         },
+         ext_modules=[
+-            make_cuda_ext(
+-                name='sparse_conv_ext',
+-                module='mmdet3d.ops.spconv',
+-                extra_include_path=[
+-                    # PyTorch 1.5 uses ninjia, which requires absolute path
+-                    # of included files, relative path will cause failure.
+-                    os.path.abspath(
+-                        os.path.join(*'mmdet3d.ops.spconv'.split('.'),
+-                                     'include/'))
+-                ],
+-                sources=[
+-                    'src/all.cc',
+-                    'src/reordering.cc',
+-                    'src/reordering_cuda.cu',
+-                    'src/indice.cc',
+-                    'src/indice_cuda.cu',
+-                    'src/maxpool.cc',
+-                    'src/maxpool_cuda.cu',
+-                ],
+-                extra_args=['-w', '-std=c++14']),
+             make_cuda_ext(
+                 name='iou3d_cuda',
+                 module='mmdet3d.ops.iou3d',
+diff --git a/tools/ctrl/extend_tracks.py b/tools/ctrl/extend_tracks.py
+index 13be163..304048f 100644
+--- a/tools/ctrl/extend_tracks.py
++++ b/tools/ctrl/extend_tracks.py
+@@ -133,7 +133,7 @@ args = parser.parse_args()
+ if __name__ == '__main__':
+ 
+ 
+-    config = yaml.load(open(args.config, 'r'))
++    config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+     config_name = os.path.basename(args.config).split('.')[0]
+     bin_path = config['bin_path']
+     bin_data = read_bin(bin_path)
+diff --git a/tools/ctrl/extract_poses.py b/tools/ctrl/extract_poses.py
+index f36fb9e..da5c08c 100644
+--- a/tools/ctrl/extract_poses.py
++++ b/tools/ctrl/extract_poses.py
+@@ -24,6 +24,9 @@ if __name__ == '__main__':
+     context2ts = defaultdict(list)
+ 
+     for path in info_path_list:
++        if not os.path.exists(path):
++            print(f'skip missing {path}')
++            continue
+         with open(path, 'rb') as fr:
+             mmdet_info = pkl.load(fr)
+         
+@@ -38,8 +41,7 @@ if __name__ == '__main__':
+     for k, v in context2ts.items():
+         context2ts[k] = sorted(v)
+     
+-    assert sum([len(v) for _, v in context2ts.items()]) == len(idx2timestamp)
+-    assert len(pose_dict) == len(idx2timestamp)
++    assert sum([len(v) for _, v in context2ts.items()]) == len(pose_dict)
+     
+     with open('./data/waymo/kitti_format/context2timestamp.pkl', 'wb') as fw:
+         pkl.dump(context2ts, fw)
+diff --git a/tools/ctrl/generate_candidates.py b/tools/ctrl/generate_candidates.py
+index b741379..0ea457b 100644
+--- a/tools/ctrl/generate_candidates.py
++++ b/tools/ctrl/generate_candidates.py
+@@ -39,7 +39,7 @@ def tracklet_assign_wrapper(tracklet_pd_dict, tracklet_gt_dict, config, process)
+ def tracklet_assign(tracklet_pd_dict, tracklet_gt_dict, keys_list, out_dict, counter_list, config, token=0, process=1):
+     try:
+         print('Enter workers')
+-        torch.cuda.set_device(token % 8)
++        torch.cuda.set_device(token % torch.cuda.device_count())
+         for i, segname in enumerate(keys_list):
+ 
+             if i % process != token:
+@@ -87,7 +87,7 @@ if __name__ == '__main__':
+     mp.set_start_method('spawn', force=True)
+     beg = time.time()
+ 
+-    config = yaml.load(open(args.config, 'r'))
++    config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+     config_name = os.path.basename(args.config).split('.')[0]
+     data_root = config['data_root']
+     split = config['split']
+diff --git a/tools/ctrl/generate_track_input.py b/tools/ctrl/generate_track_input.py
+index 29f6abb..ed976eb 100644
+--- a/tools/ctrl/generate_track_input.py
++++ b/tools/ctrl/generate_track_input.py
+@@ -68,7 +68,7 @@ def extract_and_save_point_wrapper(config, tracklets, timestamps, timestamps2idx
+ 
+ def extract_and_save_point(config, tracklets_dict, num_pts_dict, dict_keys, timestamps, timestamps2idx, mm_data_root, save_dir, counter_list, token=0, process=1):
+     try:
+-        torch.cuda.set_device(token % 8)
++        torch.cuda.set_device(token % torch.cuda.device_count())
+         if config['split'] in ('training', 'val'):
+             kitti_split = 'training'
+         else:
+@@ -126,7 +126,7 @@ if __name__ == '__main__':
+     # assert args.process == 1, 'Mulitprocess cannot work. Cannot pass tracklets_dict into target function, I dont know why'
+     multiprocessing.set_start_method('spawn', force=True)
+ 
+-    config = yaml.load(open(args.config, 'r'))
++    config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+     config_name = os.path.basename(args.config).split('.')[0]
+     data_root = config['data_root']
+ 
+diff --git a/tools/ctrl/generate_train_gt_bin.py b/tools/ctrl/generate_train_gt_bin.py
+index 4c84d55..814de89 100644
+--- a/tools/ctrl/generate_train_gt_bin.py
++++ b/tools/ctrl/generate_train_gt_bin.py
+@@ -55,7 +55,7 @@ def main(data_folder, save_path):
+         context_name = tf_record_name.replace('segment-', '').replace('_with_camera_labels.tfrecord', '')
+         for data in dataset:
+             frame = open_dataset.Frame()
+-            frame.ParseFromString(bytearray(data.numpy()))
++            frame.ParseFromString(bytes(data.numpy()))
+             obj_list = extract_objects_from_frame(frame, context_name)
+             for obj in obj_list:
+                 bin_data.objects.append(obj)
+diff --git a/tools/ctrl/remove_empty.py b/tools/ctrl/remove_empty.py
+index 5df66dc..584f982 100644
+--- a/tools/ctrl/remove_empty.py
++++ b/tools/ctrl/remove_empty.py
+@@ -66,7 +66,7 @@ def process_single_frame(config, data_root, out_list, input_list, ts2idx, kitti_
+     print(f'Process {token} starts...')
+ 
+     try:
+-        torch.cuda.set_device(token % 8)
++        torch.cuda.set_device(token % torch.cuda.device_count())
+ 
+         from mmdet3d.core import LiDARInstance3DBoxes
+ 
+@@ -185,7 +185,7 @@ if __name__ == '__main__':
+         pool.close()
+         pool.join()
+     else:
+-        process_single_frame(config, waymo_data_root, out_list, input_list, args.split, ts2idx, 0, 1)
++        process_single_frame(config, waymo_data_root, out_list, input_list, ts2idx, args.split, 0, 1)
+ 
+     print('Convert results to bin file...')
+     save_to_bin(out_list, save_path)
+diff --git a/tools/data_converter/kitti_data_utils.py b/tools/data_converter/kitti_data_utils.py
+index 1a5d4fc..d769c16 100644
+--- a/tools/data_converter/kitti_data_utils.py
++++ b/tools/data_converter/kitti_data_utils.py
+@@ -484,9 +484,9 @@ def add_difficulty_to_annos(info):
+     occlusion = annos['occluded']
+     truncation = annos['truncated']
+     diff = []
+-    easy_mask = np.ones((len(dims), ), dtype=np.bool)
+-    moderate_mask = np.ones((len(dims), ), dtype=np.bool)
+-    hard_mask = np.ones((len(dims), ), dtype=np.bool)
++    easy_mask = np.ones((len(dims), ), dtype=np.bool_)
++    moderate_mask = np.ones((len(dims), ), dtype=np.bool_)
++    hard_mask = np.ones((len(dims), ), dtype=np.bool_)
+     i = 0
+     for h, o, t in zip(height, occlusion, truncation):
+         if o > max_occlusion[0] or h <= min_height[0] or t > max_trunc[0]:
+diff --git a/tools/data_converter/s3dis_data_utils.py b/tools/data_converter/s3dis_data_utils.py
+index b9b8091..45e687d 100644
+--- a/tools/data_converter/s3dis_data_utils.py
++++ b/tools/data_converter/s3dis_data_utils.py
+@@ -76,8 +76,8 @@ class S3DISData(object):
+                 f'{self.split}_{sample_idx}_sem_label.npy')
+ 
+             points = np.load(pts_filename).astype(np.float32)
+-            pts_instance_mask = np.load(pts_instance_mask_path).astype(np.int)
+-            pts_semantic_mask = np.load(pts_semantic_mask_path).astype(np.int)
++            pts_instance_mask = np.load(pts_instance_mask_path).astype(np.int64)
++            pts_semantic_mask = np.load(pts_semantic_mask_path).astype(np.int64)
+ 
+             mmcv.mkdir_or_exist(osp.join(self.root_dir, 'points'))
+             mmcv.mkdir_or_exist(osp.join(self.root_dir, 'instance_mask'))
+@@ -137,7 +137,7 @@ class S3DISSegData(object):
+                                  12])  # used for seg task
+         self.ignore_index = len(self.cat_ids)
+ 
+-        self.cat_id2class = np.ones((self.all_ids.shape[0],), dtype=np.int) * \
++        self.cat_id2class = np.ones((self.all_ids.shape[0],), dtype=np.int64) * \
+             self.ignore_index
+         for i, cat_id in enumerate(self.cat_ids):
+             self.cat_id2class[cat_id] = i
+@@ -165,7 +165,7 @@ class S3DISSegData(object):
+             if mask.endswith('npy'):
+                 mask = np.load(mask)
+             else:
+-                mask = np.fromfile(mask, dtype=np.long)
++                mask = np.fromfile(mask, dtype=np.int64)
+         label = self.cat_id2class[mask]
+         return label
+ 
+diff --git a/tools/data_converter/scannet_data_utils.py b/tools/data_converter/scannet_data_utils.py
+index baa8fb0..afa6207 100644
+--- a/tools/data_converter/scannet_data_utils.py
++++ b/tools/data_converter/scannet_data_utils.py
+@@ -97,9 +97,9 @@ class ScanNetData(object):
+                     f'{sample_idx}_sem_label.npy')
+ 
+                 pts_instance_mask = np.load(pts_instance_mask_path).astype(
+-                    np.long)
++                    np.int64)
+                 pts_semantic_mask = np.load(pts_semantic_mask_path).astype(
+-                    np.long)
++                    np.int64)
+ 
+                 mmcv.mkdir_or_exist(osp.join(self.root_dir, 'instance_mask'))
+                 mmcv.mkdir_or_exist(osp.join(self.root_dir, 'semantic_mask'))
+@@ -188,7 +188,7 @@ class ScanNetSegData(object):
+         ])  # used for seg task
+         self.ignore_index = len(self.cat_ids)
+ 
+-        self.cat_id2class = np.ones((self.all_ids.shape[0],), dtype=np.int) * \
++        self.cat_id2class = np.ones((self.all_ids.shape[0],), dtype=np.int64) * \
+             self.ignore_index
+         for i, cat_id in enumerate(self.cat_ids):
+             self.cat_id2class[cat_id] = i
+@@ -218,7 +218,7 @@ class ScanNetSegData(object):
+             if mask.endswith('npy'):
+                 mask = np.load(mask)
+             else:
+-                mask = np.fromfile(mask, dtype=np.long)
++                mask = np.fromfile(mask, dtype=np.int64)
+         label = self.cat_id2class[mask]
+         return label
+ 
+diff --git a/tools/data_converter/waymo_converter.py b/tools/data_converter/waymo_converter.py
+index 3d4105f..6900f21 100644
+--- a/tools/data_converter/waymo_converter.py
++++ b/tools/data_converter/waymo_converter.py
+@@ -107,7 +107,7 @@ class Waymo2KITTI(object):
+         for frame_idx, data in enumerate(dataset):
+ 
+             frame = dataset_pb2.Frame()
+-            frame.ParseFromString(bytearray(data.numpy()))
++            frame.ParseFromString(bytes(data.numpy()))
+             if (self.selected_waymo_locations is not None
+                     and frame.context.stats.location
+                     not in self.selected_waymo_locations):
+diff --git a/tools/test.py b/tools/test.py
+index b2c5af5..2626ab9 100644
+--- a/tools/test.py
++++ b/tools/test.py
+@@ -84,7 +84,7 @@ def parse_args():
+         choices=['none', 'pytorch', 'slurm', 'mpi'],
+         default='none',
+         help='job launcher')
+-    parser.add_argument('--local_rank', type=int, default=0)
++    parser.add_argument('--local_rank', '--local-rank', type=int, default=0)
+     args = parser.parse_args()
+     if 'LOCAL_RANK' not in os.environ:
+         os.environ['LOCAL_RANK'] = str(args.local_rank)
+diff --git a/tools/test_waymo.py b/tools/test_waymo.py
+index 542eb31..1d24a9f 100644
+--- a/tools/test_waymo.py
++++ b/tools/test_waymo.py
+@@ -5,7 +5,7 @@ def get_data_from_seg(segment):
+     dataset = tf.data.TFRecordDataset(segment, compression_type='')
+     for data in dataset:
+         frame = open_dataset.Frame()
+-        frame.ParseFromString(bytearray(data.numpy()))
++        frame.ParseFromString(bytes(data.numpy()))
+ 
+         (range_images, camera_projections,
+          range_image_top_pose) = frame_utils.parse_range_image_and_camera_projection(
+diff --git a/tools/train.py b/tools/train.py
+index a9e3c37..d051b39 100644
+--- a/tools/train.py
++++ b/tools/train.py
+@@ -73,7 +73,7 @@ def parse_args():
+         choices=['none', 'pytorch', 'slurm', 'mpi'],
+         default='none',
+         help='job launcher')
+-    parser.add_argument('--local_rank', type=int, default=0)
++    parser.add_argument('--local_rank', '--local-rank', type=int, default=0)
+     parser.add_argument(
+         '--autoscale-lr',
+         action='store_true',
+@@ -181,6 +181,7 @@ def main():
+                     f'deterministic: {args.deterministic}')
+         set_random_seed(args.seed, deterministic=args.deterministic)
+     cfg.seed = args.seed
++    cfg.device = cfg.get('device', 'cuda')
+     meta['seed'] = args.seed
+     meta['exp_name'] = osp.basename(args.config)
+ 

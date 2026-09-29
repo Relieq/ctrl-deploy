@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.log
+data/
+work_dirs/
+smoke/
+.vscode/
+.idea/

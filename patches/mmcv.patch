@@ -1,0 +1,46 @@
+diff --git a/mmcv/parallel/_functions.py b/mmcv/parallel/_functions.py
+index 43580b4..bff57c8 100644
+--- a/mmcv/parallel/_functions.py
++++ b/mmcv/parallel/_functions.py
+@@ -72,7 +72,7 @@ class Scatter:
+         streams = None
+         if input_device == -1 and target_gpus != [-1]:
+             # Perform CPU to GPU copies in a background stream
+-            streams = [_get_stream(device) for device in target_gpus]
++            streams = [_get_stream(torch.device("cuda", device)) for device in target_gpus]
+ 
+         outputs = scatter(input, target_gpus, streams)
+         # Synchronize with the copy stream
+diff --git a/setup.py b/setup.py
+index a0b6a42..74db6f0 100644
+--- a/setup.py
++++ b/setup.py
+@@ -217,8 +217,8 @@ def get_extensions():
+         include_dirs.append(os.path.abspath('./mmcv/ops/csrc/common/cuda'))
+         cuda_args = os.getenv('MMCV_CUDA_ARGS')
+         extra_compile_args = {
+-            'nvcc': [cuda_args, '-std=c++14'] if cuda_args else ['-std=c++14'],
+-            'cxx': ['-std=c++14'],
++            'nvcc': [cuda_args, '-std=c++17'] if cuda_args else ['-std=c++17'],
++            'cxx': ['-std=c++17'],
+         }
+         if torch.cuda.is_available() or os.getenv('FORCE_CUDA', '0') == '1':
+             define_macros += [('MMCV_WITH_CUDA', None)]
+@@ -268,7 +268,7 @@ def get_extensions():
+         # argument
+         if platform.system() != 'Windows':
+             if parse_version(torch.__version__) <= parse_version('1.12.1'):
+-                extra_compile_args['cxx'] = ['-std=c++14']
++                extra_compile_args['cxx'] = ['-std=c++17']
+             else:
+                 extra_compile_args['cxx'] = ['-std=c++17']
+         else:
+@@ -467,7 +467,7 @@ def get_extensions():
+         # argument
+         if 'nvcc' in extra_compile_args and platform.system() != 'Windows':
+             if parse_version(torch.__version__) <= parse_version('1.12.1'):
+-                extra_compile_args['nvcc'] += ['-std=c++14']
++                extra_compile_args['nvcc'] += ['-std=c++17']
+             else:
+                 extra_compile_args['nvcc'] += ['-std=c++17']
+ 
