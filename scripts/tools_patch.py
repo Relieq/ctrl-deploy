@@ -50,13 +50,20 @@ for f in [SST / 'tools/ctrl/generate_train_gt_bin.py', SST / 'tools/data_convert
           TRK / 'preparedata/waymo/time_stamp.py', TRK / 'preparedata/waymo/ego_info.py']:
     sub(f, [(r'ParseFromString\(bytearray\(', 'ParseFromString(bytes(')], regex=True)
 
+# WOD >= 1.5 parse_range_image_and_camera_projection also returns segmentation labels (4 values)
+sub(SST / 'tools/data_converter/waymo_converter.py', [(
+    '        range_images, camera_projections, range_image_top_pose = \\\n'
+    '            parse_range_image_and_camera_projection(frame)',
+    '        parsed = parse_range_image_and_camera_projection(frame)\n'
+    '        range_images, camera_projections, range_image_top_pose = parsed[0], parsed[1], parsed[-1]')])
+
 # torch>=2 launchers pass --local-rank (dash) instead of --local_rank
 for f in [SST / 'tools/train.py', SST / 'tools/test.py']:
     sub(f, [("parser.add_argument('--local_rank', type=int", "parser.add_argument('--local_rank', '--local-rank', type=int")])
 
 # mmdet >= 2.25 train_detector() reads cfg.device
-sub(SST / 'tools/train.py', [("    cfg.seed = args.seed\n",
-                              "    cfg.seed = args.seed\n    cfg.device = cfg.get('device', 'cuda')\n")])
+sub(SST / 'tools/train.py', [(r"(    cfg\.seed = args\.seed\n)(?:    cfg\.device = cfg\.get\('device', 'cuda'\)\n)*",
+                              r"\1    cfg.device = cfg.get('device', 'cuda')\n")], regex=True)
 
 # extract_poses.py: allow a subset of splits (e.g. only validation downloaded)
 sub(SST / 'tools/ctrl/extract_poses.py', [

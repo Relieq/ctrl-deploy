@@ -44,6 +44,13 @@ for f in list((root / 'mmdet3d').rglob('*.py')) + list((root / 'tools').rglob('*
         f.write_text(s)
         print('patched', f)
 
+# 5) SIRLayer mutated the config list in place (rel_mlp grows by one layer each time a model is built from the same cfg)
+p = root / 'mmdet3d' / 'models' / 'voxel_encoders' / 'voxel_encoder.py'
+s = p.read_text()
+s = s.replace("            rel_mlp_hidden_dims.append(in_channels) # not self.in_channels\n",
+              "            rel_mlp_hidden_dims = list(rel_mlp_hidden_dims) + [in_channels]  # not self.in_channels; do not mutate cfg\n")
+p.write_text(s)
+
 # 3) mmdet3d version gate: allow mmcv 1.7.x
 p = root / 'mmdet3d' / '__init__.py'
 s = p.read_text().replace("mmcv_maximum_version = '1.4.0'", "mmcv_maximum_version = '1.7.2'")

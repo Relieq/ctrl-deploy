@@ -192,6 +192,19 @@ index ce1f0c0..7f1a8b0 100644
  
          # to target box structure
          gt_bboxes_3d = DepthInstance3DBoxes(
+diff --git a/mmdet3d/models/voxel_encoders/voxel_encoder.py b/mmdet3d/models/voxel_encoders/voxel_encoder.py
+index cfbbf3f..6c211b7 100644
+--- a/mmdet3d/models/voxel_encoders/voxel_encoder.py
++++ b/mmdet3d/models/voxel_encoders/voxel_encoder.py
+@@ -662,7 +662,7 @@ class SIRLayer(DynamicVFE):
+         self._with_rel_mlp = with_rel_mlp
+         self.xyz_normalizer = xyz_normalizer
+         if with_rel_mlp:
+-            rel_mlp_hidden_dims.append(in_channels) # not self.in_channels
++            rel_mlp_hidden_dims = list(rel_mlp_hidden_dims) + [in_channels]  # not self.in_channels; do not mutate cfg
+             self.rel_mlp = build_mlp(rel_mlp_in_channel, rel_mlp_hidden_dims, norm_cfg, act=act)
+ 
+         if act != 'relu' or dropout > 0: # do not double in_filter
 diff --git a/mmdet3d/ops/ball_query/src/ball_query.cpp b/mmdet3d/ops/ball_query/src/ball_query.cpp
 index 6e9d5f7..e8256a0 100644
 --- a/mmdet3d/ops/ball_query/src/ball_query.cpp
@@ -587,7 +600,7 @@ index baa8fb0..afa6207 100644
          return label
  
 diff --git a/tools/data_converter/waymo_converter.py b/tools/data_converter/waymo_converter.py
-index 3d4105f..6900f21 100644
+index 3d4105f..99d2409 100644
 --- a/tools/data_converter/waymo_converter.py
 +++ b/tools/data_converter/waymo_converter.py
 @@ -107,7 +107,7 @@ class Waymo2KITTI(object):
@@ -599,6 +612,17 @@ index 3d4105f..6900f21 100644
              if (self.selected_waymo_locations is not None
                      and frame.context.stats.location
                      not in self.selected_waymo_locations):
+@@ -204,8 +204,8 @@ class Waymo2KITTI(object):
+             file_idx (int): Current file index.
+             frame_idx (int): Current frame index.
+         """
+-        range_images, camera_projections, range_image_top_pose = \
+-            parse_range_image_and_camera_projection(frame)
++        parsed = parse_range_image_and_camera_projection(frame)
++        range_images, camera_projections, range_image_top_pose = parsed[0], parsed[1], parsed[-1]
+ 
+         # First return
+         points_0, cp_points_0, intensity_0, elongation_0 = \
 diff --git a/tools/test.py b/tools/test.py
 index b2c5af5..2626ab9 100644
 --- a/tools/test.py

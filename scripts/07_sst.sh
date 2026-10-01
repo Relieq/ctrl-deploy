@@ -10,4 +10,4 @@ pip install -v --no-build-isolation --no-deps -e . > "$CTRL_ROOT/build_sst.log" 
 # runtime deps (upstream pins numba 0.48 / numpy<1.20, which cannot coexist with torch 2.x)
 pip install "numba==0.58.1" "numpy==1.23.5" nuscenes-devkit lyft_dataset_sdk "networkx<3" plyfile \
   "scikit-image<0.22" tensorboard "trimesh>=2.35.39,<2.35.40" "shapely<2" "pyyaml" filterpy
-pip install "numpy==1.23.5" "setuptools==69.5.1"
+pip install "numpy==1.23.5" "setuptools==69.5.1" "protobuf==3.20.3"

@@ -19,7 +19,7 @@ PyTorch 2.7 + CUDA 12.8, dựng lại mọi CUDA extension, vá các lỗi tươ
 | spconv | 2.2.3 (cu113) | spconv-cu126 2.3.8 |
 | torch_scatter | 2.0.9 | 2.1.2 (pt27cu128) |
 | TorchEx | - | build từ source cho sm_120 |
-| TensorFlow / WOD | 2.4 / tf-2-4-0 1.4.1 | tensorflow-cpu 2.12 / tf-2-12-0 1.6.4 (`--no-deps`) |
+| TensorFlow / WOD | 2.4 / tf-2-4-0 1.4.1 | tensorflow-cpu 2.12 / tf-2-12-0 1.6.4 (`--no-deps`), protobuf 3.20.3 |
 | numpy / numba | <1.20 / 0.48 | 1.23.5 / 0.58.1 |
 | Waymo metric tools | - | build bằng Bazel từ WOD v1.6.1 |
 
@@ -63,6 +63,8 @@ Các script đều idempotent và có thể chạy lại từng bước (`script
 | `06_openmmlab_sparse.sh` | Cài mmdet, mmseg, torch_scatter, spconv; build TorchEx |
 | `07_sst.sh` | Port SST sang torch 2 (`sst_port_torch2.py`), vá tool (`tools_patch.py`), build ops |
 | `08_waymo_eval_tools.sh` | Build `compute_detection_metrics_main` / `compute_tracking_metrics_main` |
+| `09_download_ctrl_resources.sh` | Tải checkpoint, detection FSD val và `poses.pkl` công khai của tác giả |
+| `10_gcloud.sh` | Cài Google Cloud CLI để tải Waymo |
 
 ## Các bản vá (tóm tắt)
 
@@ -74,9 +76,13 @@ Các script đều idempotent và có thể chạy lại từng bước (`script
 - **tools/ctrl và ImmortalTracker**:
   - `yaml.load(..., Loader=FullLoader)`.
   - `set_device(token % device_count())`: bản gốc giả định có 8 GPU nên lỗi âm thầm khi chỉ có 1 GPU.
-  - `ParseFromString(bytes(...))` cho protobuf 4.
+  - `ParseFromString(bytes(...))`. Riêng các util của WOD vẫn dùng `bytearray`, nên env ghim `protobuf==3.20.3`.
   - Sửa đường chạy một tiến trình của `ego_info.py` và `remove_empty.py`.
   - `extract_poses.py` chấp nhận thiếu split.
+  - Converter Waymo: WOD ≥ 1.5 trả về 4 giá trị từ `parse_range_image_and_camera_projection`.
+- **Bug của SST**: `SIRLayer` gọi `append` thẳng vào `rel_mlp_hidden_dims` trong config. Mỗi lần dựng lại model từ
+  cùng `cfg`, nó có thêm một lớp và không còn khớp checkpoint. Đã sửa; `scripts/check_ckpt.py` xác nhận cả 3
+  checkpoint chính thức nạp đủ 322/322 tham số.
 
 ## Smoke test
 
@@ -97,18 +103,45 @@ Kết quả tham khảo trên RTX 5050 Laptop 8 GB:
 
 Train CTRL batch 2 dùng khoảng 2.6 GB VRAM.
 
-## Chạy với dữ liệu Waymo thật
+## Chạy trên Waymo validation (thư mục `waymo/`)
 
-1. Tải Waymo Open Dataset v1.4.x (cần đăng ký tại waymo.com/open) vào `SST/data/waymo/waymo_format/{training,validation,testing}`,
-   rồi chuyển sang định dạng KITTI theo `SST/docs/overall_instructions.md`:
-   `python tools/create_data.py waymo --root-path ./data/waymo/ --out-dir ./data/waymo/ --workers 8 --extra-tag waymo`.
-   Sau đó chép `tools/idx2timestamp.pkl` và `tools/idx2contextname.pkl` vào `data/waymo/kitti_format/`.
-2. `python tools/ctrl/extract_poses.py` (và `generate_train_gt_bin.py` nếu cần train).
-3. Tracker: trong `ImmortalTracker-for-CTRL`, chạy như `smoke_test/run_tracker.sh` với file detection FSD thật
-   (`.bin`). Khi sinh dữ liệu train, bỏ khối `merge:` trong config tracker.
-4. CTRL: sửa `bin_path`/`val_bin_path`/`split` trong `tools/ctrl/data_configs/fsd_base_vehicle.yaml`,
-   chạy `generate_track_input.py` (và `generate_candidates.py` khi train), rồi chạy
-   `python tools/test.py configs/ctrl/ctrl_veh_24e.py <ckpt> --eval waymo --options pklfile_prefix=./work_dirs/ctrl_val`.
+Yêu cầu: tài khoản Google đã đăng ký tại https://waymo.com/open. Chạy `gcloud auth login` (bằng user dùng để chạy
+pipeline, ở đây là `root`) và cài gcloud qua `scripts/10_gcloud.sh`.
 
-Lưu ý với GPU 8 GB: inference chạy thoải mái. Train cấu hình gốc (8 GPU × 16 mẫu) cần giảm `samples_per_gpu`
-và chạy lâu hơn nhiều.
+```bash
+bash scripts/09_download_ctrl_resources.sh        # checkpoint + detection FSD val + poses.pkl công khai của tác giả (~1.7 GB)
+NUM_SEGMENTS=20 P=3 bash waymo/stream_val.sh      # tải → convert → xoá tfrecord; bỏ NUM_SEGMENTS để chạy đủ 202
+bash waymo/run_val_all.sh                         # vehicle, pedestrian, cyclist; mỗi lớp eval sau từng bước
+```
+
+- `waymo/convert_segment.py` lấy chỉ số segment từ `idx2contextname.pkl`, không dựa vào thứ tự file trong thư mục.
+  Nhờ vậy có thể convert một tập con, theo thứ tự bất kỳ, và vẫn khớp với `poses.pkl`/`idx2timestamp.pkl` của tác giả.
+  Mỗi segment sinh ra velodyne 6 chiều (đúng code converter của SST), GT và `ts_info`/`ego_info` cho tracker,
+  chiếm khoảng 0.6 GB. Cả 202 segment khoảng 120 GB.
+- `waymo/finalize_val.py` ghép `gt.bin`, các bảng tra cứu và lọc các file `.bin` detection theo các segment đã convert.
+- Kết quả của từng bước nằm trong `SST/data/ctrl_runs/<lớp>/summary.txt`.
+
+### Kết quả trên 20 segment val đầu (checkpoint chính thức, RTX 5050 Laptop)
+
+L1 mAP (L2 mAP trong ngoặc):
+
+| Bước | Vehicle | Pedestrian | Cyclist |
+|---|---|---|---|
+| FSD gốc (`fsd_base_*_val.bin`) | 0.814 (0.746) | 0.864 (0.816) | 0.883 (0.853) |
+| ImmortalTracker keep10 | 0.807 (0.740) | 0.872 (0.826) | 0.889 (0.864) |
+| + extend ngược | 0.808 (0.741) | 0.872 (0.827) | 0.890 (0.865) |
+| CTRL | 0.857 (0.802) | 0.886 (0.843) | 0.914 (0.896) |
+| **CTRL + bỏ box rỗng** | **0.862 (0.807)** | **0.893 (0.849)** | **0.917 (0.899)** |
+| Kết quả tham chiếu của tác giả, cùng 20 segment | 0.871¹ | 0.892¹ | 0.915² |
+
+¹ `best_val_in_paper.bin`: bản tốt nhất trong bài báo (detector gốc mạnh hơn `fsd_base`).
+² `cyc_result_val_bi_ext_no_empty.bin`: cùng chuỗi `fsd_base` + extend hai chiều + bỏ box rỗng.
+
+Pedestrian và cyclist khớp kết quả của tác giả trong khoảng ±0.3 điểm. Vehicle thấp hơn bản "best" khoảng 1 điểm vì
+khác detector gốc. CTRL lấy mẫu ngẫu nhiên tối đa 1024 điểm mỗi frame, nên giữa các lần chạy có dao động khoảng ±0.1 điểm.
+
+## Train trên dữ liệu thật
+
+Cần thêm tập train (khoảng 800 GB tfrecord). Có thể convert tập train theo cùng cách cuốn chiếu (prefix `0`), cùng với
+`train_gt.bin`/`fsd6f6e_vehicle_full_train.bin` của tác giả. Train cấu hình gốc (8 GPU × 16 mẫu) trên GPU 8 GB
+phải giảm `samples_per_gpu` và chạy lâu hơn nhiều.
