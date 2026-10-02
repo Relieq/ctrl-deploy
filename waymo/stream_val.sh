@@ -18,6 +18,7 @@ export TMP_DIR="${TMP_DIR:-$CTRL_ROOT/tmp_tfrecord}"
 export DONE_DIR="$SST_DATA/waymo/waymo_format/gt_parts"
 export SST HERE TF_CPP_MIN_LOG_LEVEL=3
 mkdir -p "$TMP_DIR" "$DONE_DIR"
+rm -f "$TMP_DIR"/*  # leftovers of an interrupted run (partial .gstmp downloads)
 
 LIST="$CTRL_ROOT/val_tfrecords.txt"
 gsutil ls "$BUCKET/*.tfrecord" > "$LIST"
@@ -37,7 +38,12 @@ one() {
   url="$1"; name="$(basename "$url")"
   ctx="${name#segment-}"; ctx="${ctx%_with_camera_labels.tfrecord}"
   [ -s "$DONE_DIR/$ctx.bin" ] && { echo "skip $ctx"; return 0; }
-  gsutil -q cp "$url" "$TMP_DIR/$name"
+  for try in 1 2 3; do
+    gsutil -q cp "$url" "$TMP_DIR/$name" && break
+    rm -f "$TMP_DIR/$name" "$TMP_DIR/$name"_.gstmp
+    echo "download retry $try for $ctx"; sleep 10
+  done
+  [ -s "$TMP_DIR/$name" ] || { echo "DOWNLOAD FAILED $ctx"; return 0; }
   python "$HERE/convert_segment.py" "$TMP_DIR/$name" --sst "$SST" --sst-data "$SST_DATA" --trk-data "$TRK_DATA" \
     || echo "FAILED $ctx"
   rm -f "$TMP_DIR/$name"
